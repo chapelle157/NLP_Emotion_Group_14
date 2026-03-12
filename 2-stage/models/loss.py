@@ -95,6 +95,7 @@ class AsymmetricLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        logits = logits.clamp(min=-50.0, max=50.0)  # sanity clamp to prevent overflow in exp
         p  = torch.sigmoid(logits)
 
         # Positive branch — clamp p away from 0
