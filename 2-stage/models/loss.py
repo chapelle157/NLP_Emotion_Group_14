@@ -184,7 +184,7 @@ class TieredPerClassASL(nn.Module):
         clip: float,
     ) -> torch.Tensor:
         # Positive branch
-        p_safe = p.clamp(min=_EPS)
+        p_safe = p.clamp(min=_EPS, max=1.0 - _EPS)
         lp = t * torch.log(p_safe)
         if gp > 0:
             lp = ((1.0 - p) ** gp) * lp
