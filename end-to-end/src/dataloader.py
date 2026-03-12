@@ -262,7 +262,7 @@ def compute_pos_weight(
         scale_map[idx] = pw_scale_rare
     for idx in tier_indices.get("common", []):
         scale_map[idx] = pw_scale_common
-    pw = ((n - label_counts) / label_counts) ** scale_map
+    pw = ((n - label_counts) / label_counts) * scale_map
     return torch.tensor(pw, dtype=torch.float32, device=device)
 
 

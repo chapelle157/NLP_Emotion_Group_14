@@ -318,7 +318,7 @@ def compute_pos_weight_stage1(
     """(1,) pos_weight for Stage 1 binary BCE."""
     n_emotion = float(dataset.has_emotion.sum().clip(min=1))
     n_neutral = float(len(dataset) - n_emotion)
-    pw = (n_neutral / n_emotion) ** scale
+    pw = (n_neutral / n_emotion) * scale
     return torch.tensor([pw], dtype=torch.float32, device=device)
 
 
@@ -345,7 +345,7 @@ def compute_pos_weight_stage2(
     for idx in tier_indices.get("common", []):
         scale_map[idx] = pw_scale_common
 
-    pw = ((n - label_counts) / label_counts) ** scale_map
+    pw = ((n - label_counts) / label_counts) * scale_map
     return torch.tensor(pw, dtype=torch.float32, device=device)
 
 
