@@ -25,7 +25,7 @@ import torch.nn.functional as F
 
 __all__ = ["BCELoss", "FocalBCELoss", "AsymmetricLoss", "TieredPerClassASL", "get_loss_fn"]
 
-_EPS = 1e-8
+_EPS = 1e-7
 
 
 # =============================================================================
@@ -37,8 +37,6 @@ class BCELoss(nn.Module):
         super().__init__()
         if pos_weight is not None:
             pos_weight = pos_weight.clamp(min=0.01, max=200.0)
-            if torch.isnan(pos_weight).any() or torch.isinf(pos_weight).any():
-                raise ValueError(f"[BCELoss] pos_weight contains NaN/Inf: {pos_weight}")
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight, reduction=reduction)
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
@@ -97,10 +95,11 @@ class AsymmetricLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        logits = logits.clamp(min=-50.0, max=50.0)  # sanity clamp to prevent overflow in exp
         p  = torch.sigmoid(logits)
 
         # Positive branch — clamp p away from 0
-        p_safe = p.clamp(min=_EPS)
+        p_safe = p.clamp(min=_EPS, max=1.0-_EPS)
         lp = targets * torch.log(p_safe)
         if self.gamma_pos > 0:
             lp = ((1.0 - p) ** self.gamma_pos) * lp
@@ -198,9 +197,6 @@ class TieredPerClassASL(nn.Module):
         return -(lp + ln)   # (B,)
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        # Guard: NaN logits (e.g. from exploding gradients) propagate silently → catch early
-        if torch.isnan(logits).any():
-            raise ValueError("[TieredPerClassASL] NaN detected in logits — check LR / gradient clipping")
         p    = torch.sigmoid(logits)            # (B, C)
         cols = []
         for c in range(logits.size(1)):

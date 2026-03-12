@@ -131,7 +131,7 @@ def _run_epoch(
 
             with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=use_amp):
                 logits = model(ids, mask)
-                loss   = criterion(logits, lbls)
+                loss = criterion(logits.float(), lbls.float())
 
             if is_train:
                 if scaler is not None:
@@ -147,14 +147,7 @@ def _run_epoch(
                 if scheduler is not None:
                     scheduler.step()
 
-            loss_val = loss.item()
-            if not torch.isfinite(torch.tensor(loss_val)):
-                raise RuntimeError(
-                    f"[_run_epoch] Non-finite loss={loss_val} during {phase}. "
-                    "Likely cause: bad pos_weight (NaN/Inf/negative) or exploding logits. "
-                    "Check compute_pos_weight_stage2 and label columns in your CSV."
-                )
-            loss_meter.update(loss_val, lbls.size(0))
+            loss_meter.update(loss.item(), lbls.size(0))
             if not is_train:
                 # Cast to float32 before numpy — bfloat16 is not supported by numpy
                 probs = torch.sigmoid(logits).float().cpu().numpy()

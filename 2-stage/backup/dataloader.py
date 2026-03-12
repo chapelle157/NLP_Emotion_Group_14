@@ -335,17 +335,10 @@ def compute_pos_weight_stage2(
     where scale[c] is the tier-specific multiplier.
 
     NOTE: uses multiply (*), NOT exponent (**), to keep values stable.
-
-    IMPORTANT: for multi-label data, neg_count[c] = N - pos_count[c] per class,
-    NOT N - total_label_counts. This avoids neg_counts going negative when a
-    sample carries multiple emotion labels (which is common after augmentation).
     """
     n            = len(dataset)
-    # pos_count[c]  = number of samples where class c == 1
-    # neg_count[c]  = number of samples where class c == 0
-    # These are per-class and always sum to N, so neg_count is always >= 0.
-    label_counts = dataset.labels_6.sum(axis=0).clip(min=1.0)        # (C,) pos counts
-    neg_counts   = np.maximum(n - label_counts, 1.0)                  # (C,) true per-class neg counts
+    label_counts = dataset.labels_6.sum(axis=0).clip(min=1.0)
+    neg_counts   = np.maximum(n - label_counts, 1.0)   # guard against negatives for tiny data
 
     scale_map = np.ones(NUM_EMOTIONS, dtype=np.float32)
     for idx in tier_indices.get("very_rare", []):
