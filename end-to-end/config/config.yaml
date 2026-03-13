@@ -36,14 +36,14 @@ data:
 
 e2e:
   model:
-    name:    "deberta"
+    name:    "bert"
     dropout: 0.2
 
   training:
     epochs:                  20
     batch_size:              32
     lr:                      2.0e-5
-    weight_decay:            0.01
+    weight_decay:            0.05
     optimizer:               "adamw"
     scheduler:               "cosine_warmup"
     warmup_ratio:            0.10
@@ -56,8 +56,8 @@ e2e:
     rare_divisor:      1.0
 
     augment_rare:         true
-    aug_copies_very_rare: 4
-    aug_copies_rare:      2
+    aug_copies_very_rare: 2
+    aug_copies_rare:      1
     aug_copies_common:    0
 
     use_weighted_sampler: true
