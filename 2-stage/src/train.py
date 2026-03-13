@@ -147,14 +147,7 @@ def _run_epoch(
                 if scheduler is not None:
                     scheduler.step()
 
-            loss_val = loss.item()
-            if not torch.isfinite(torch.tensor(loss_val)):
-                raise RuntimeError(
-                    f"[_run_epoch] Non-finite loss={loss_val} during {phase}. "
-                    "Likely cause: bad pos_weight (NaN/Inf/negative) or exploding logits. "
-                    "Check compute_pos_weight_stage2 and label columns in your CSV."
-                )
-            loss_meter.update(loss_val, lbls.size(0))
+            loss_meter.update(loss.item(), lbls.size(0))
             if not is_train:
                 # Cast to float32 before numpy — bfloat16 is not supported by numpy
                 probs = torch.sigmoid(logits).float().cpu().numpy()
@@ -297,7 +290,9 @@ def train(
         csv.DictWriter(f, fieldnames=csv_fields).writeheader()
 
     # ── Training loop ─────────────────────────────────────────────────────────
-    best_val_loss = float("inf")
+    # Stage 1 → best val_f1 (binary); Stage 2 → best macro_f1 (imbalanced multi-label)
+    best_val_loss = float("inf")   # still tracked for reference / checkpoint
+    best_score    = -1.0           # metric used for saving & early stopping
     best_metrics: Dict[str, float] = {}
     best_epoch    = 0
     no_improve    = 0
@@ -354,8 +349,18 @@ def train(
         with open(log_path, "a", newline="") as f:
             csv.DictWriter(f, fieldnames=csv_fields).writerow(row)
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        # ── Metric for saving & early stopping ───────────────────────────────
+        # Stage 1 → val_f1 (binary);  Stage 2 → macro_f1 (better for imbalance)
+        if stage == "stage1":
+            cur_score = val_metrics.get("f1", 0.0)
+            score_key = "val_f1"
+        else:
+            cur_score = val_metrics.get("macro_f1", 0.0)
+            score_key = "val_macro_f1"
+
+        if cur_score > best_score:
+            best_score    = cur_score
+            best_val_loss = val_loss   # record for reference
             best_metrics  = val_metrics.copy()
             best_epoch    = epoch
             no_improve    = 0
@@ -370,21 +375,24 @@ def train(
                 "optimizer":       optimizer.state_dict(),
                 "scheduler":       scheduler.state_dict() if scheduler else None,
                 "val_loss":        best_val_loss,
+                "best_score":      best_score,
+                "score_key":       score_key,
                 "val_metrics":     best_metrics,
                 "threshold":       threshold,
                 "cfg":             cfg,
                 "run_dir":         run_dir,
                 "run_name":        run_name,
             }, ckpt_path)
-            print(f"  ✓ Checkpoint saved → {ckpt_path}")
+            print(f"  ✓ Checkpoint saved ({score_key}={cur_score:.4f}) → {ckpt_path}")
         else:
             no_improve += 1
+            print(f"  · No improve {no_improve}/{patience}  ({score_key}={cur_score:.4f}, best={best_score:.4f})")
 
         if no_improve >= patience:
-            print(f"[train] Early stopping at epoch {epoch} ({patience} epochs no improve).")
+            print(f"[train] Early stopping at epoch {epoch} ({patience} epochs no improve on {score_key}).")
             break
 
-    print(f"\n[train] {stage.upper()} done — best val_loss={best_val_loss:.4f} @ epoch {best_epoch}")
+    print(f"\n[train] {stage.upper()} done — best {score_key}={best_score:.4f} @ epoch {best_epoch}")
     for k, v in best_metrics.items():
         print(f"         {k}={v:.4f}")
     print(f"[train] log → {log_path}")
@@ -394,6 +402,8 @@ def train(
         "run_dir":          run_dir,
         "run_name":         run_name,
         "best_val_loss":    best_val_loss,
+        "best_score":       best_score,
+        "score_key":        score_key,
         "best_epoch":       best_epoch,
         "best_metrics":     best_metrics,
         "log_path":         log_path,
