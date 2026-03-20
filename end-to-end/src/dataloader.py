@@ -106,6 +106,31 @@ def _synonym_replace(text: str, n: int = 2, seed: int = None) -> str:
 
 
 # =============================================================================
+#  Text preprocessing
+# =============================================================================
+
+# Regex patterns (compiled once for performance)
+_RE_URL     = re.compile(r"https?://\S+|www\.\S+")
+_RE_MENTION = re.compile(r"@\w+")
+_RE_SPACES  = re.compile(r"\s+")
+
+
+def preprocess_text(text: str) -> str:
+    """
+    Clean raw social-media text before tokenisation.
+
+    Steps (order matters):
+      1. Replace URLs     → '<url>'
+      2. Replace mentions → '<mention>'
+      3. Collapse extra whitespace (tabs, newlines, multiple spaces) → single space
+    """
+    text = _RE_URL.sub("<url>", text)
+    text = _RE_MENTION.sub("<mention>", text)
+    text = _RE_SPACES.sub(" ", text).strip()
+    return text
+
+
+# =============================================================================
 #  Tier classification
 # =============================================================================
 
@@ -284,7 +309,8 @@ def _load_csv(filepath: str) -> Tuple[List[str], np.ndarray]:
         raise ValueError(f"Missing columns {missing} in {filepath}")
     if "text" not in df.columns:
         raise ValueError(f"'text' column not found in {filepath}")
-    return df["text"].astype(str).tolist(), df[EMOTION_NAMES].values.astype(np.float32)
+    texts = [preprocess_text(t) for t in df["text"].astype(str).tolist()]
+    return texts, df[EMOTION_NAMES].values.astype(np.float32)
 
 
 def _split_data(
